@@ -1,0 +1,85 @@
+name: Build Android Release APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allows manual trigger of this workflow from the Actions tab
+
+jobs:
+  build:
+    name: Build & Release Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the source code from the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Java 17 required for modern Android builds
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu' # Highly stable OpenJDK distribution
+          java-version: '17'
+
+      # Step 3: Set up Flutter Environment (Stable Channel)
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true # Enables automatic caching of Flutter SDK and packages
+
+      # Step 4: Output Flutter doctor and version details for debug logs
+      - name: Show Flutter Info
+        run: |
+          flutter --version
+          flutter doctor
+
+      # Step 5: Cache Gradle caches and wrapper to speed up subsequent builds
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # Step 6: Fetch dependencies declared in pubspec.yaml
+      - name: Install Pub Dependencies
+        run: flutter pub get
+
+      # Step 7: Analyze Dart code static diagnostics
+      - name: Analyze Project Static Code
+        run: flutter analyze
+
+      # Step 8: Build the release APK package
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      # Step 9: Upload the compiled APK as a workflow artifact
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivateVaultCalculator-Release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error # Fail the job if the APK was not generated
+
+      # =========================================================================
+      # Optional: Build Android App Bundle (.aab) for Google Play Console release
+      # =========================================================================
+      # - name: Build Release App Bundle
+      #   run: flutter build appbundle --release
+      #
+      # - name: Upload Release App Bundle Artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: PrivateVaultCalculator-AppBundle
+      #     path: build/app/outputs/bundle/release/app-release.aab

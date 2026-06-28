@@ -1,0 +1,45 @@
+# Miscellaneous files
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom
+.buildlog
+.history
+.svn
+migrate.cfg
+
+# IDE-specific configurations
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Gradle build folder and configs
+.gradle/
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/app/src/main/res/values/key.xml
+
+# Flutter build outputs and artifacts
+build/
+.dart_tool/
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# iOS/CocoaPods specific
+**/ios/Flutter/.flutter-plugins
+**/ios/Flutter/.flutter-plugins-dependencies
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Pods/
+**/ios/Podfile.lock
+
+# Crashlytics/Firebase configurations
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
