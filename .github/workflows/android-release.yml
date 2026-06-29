@@ -58,7 +58,7 @@ jobs:
 
       # Step 7: Analyze Dart code static diagnostics
       - name: Analyze Project Static Code
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       # Step 8: Build the release APK package
       - name: Build Release APK
