@@ -1,5 +1,4 @@
-import 'dart:ui';
-import 'package:flutter/material';
+import 'package:flutter/material.dart';
 
 class AppTheme {
   static const Color cardDarkBackground = Color(0x331C1C1E);
@@ -27,7 +26,7 @@ class AppTheme {
           surface: const Color(0xFF121214),
           background: const Color(0xFF0B0B0C),
         ),
-        cardTheme: const CardTheme(
+        cardTheme: const CardThemeData(
           color: cardDarkBackground,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -49,7 +48,7 @@ class AppTheme {
           surface: const Color(0xFFF4F6F8),
           background: const Color(0xFFFFFFFF),
         ),
-        cardTheme: const CardTheme(
+        cardTheme: const CardThemeData(
           color: cardLightBackground,
           elevation: 2,
           shadowColor: Color(0x1F000000),

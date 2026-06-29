@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -180,7 +181,7 @@ class _FolderViewState extends State<FolderView> {
             controller: controller,
             decoration: InputDecoration(
               filled: true,
-              fillColor: isDark ? Colors.white05 : Colors.black05,
+              fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
@@ -308,7 +309,7 @@ class _FolderViewState extends State<FolderView> {
                     prefixIcon: const Icon(Icons.search),
                     hintText: 'Search in folder...',
                     filled: true,
-                    fillColor: isDark ? Colors.white05 : Colors.black05,
+                    fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,

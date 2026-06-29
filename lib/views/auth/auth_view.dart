@@ -402,7 +402,7 @@ class _AuthViewState extends State<AuthView> {
             value: _selectedQuestion,
             decoration: InputDecoration(
               filled: true,
-              fillColor: isDark ? Colors.white05 : Colors.black05,
+              fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
             items: _securityQuestions.map((q) {
@@ -422,7 +422,7 @@ class _AuthViewState extends State<AuthView> {
             decoration: InputDecoration(
               hintText: 'Enter your answer',
               filled: true,
-              fillColor: isDark ? Colors.white05 : Colors.black05,
+              fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
@@ -466,7 +466,7 @@ class _AuthViewState extends State<AuthView> {
             decoration: InputDecoration(
               hintText: 'Your Answer',
               filled: true,
-              fillColor: isDark ? Colors.white05 : Colors.black05,
+              fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),

@@ -139,7 +139,7 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
             decoration: InputDecoration(
               hintText: 'Folder Name',
               filled: true,
-              fillColor: isDark ? Colors.white05 : Colors.black05,
+              fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),

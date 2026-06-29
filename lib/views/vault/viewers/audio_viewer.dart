@@ -93,7 +93,7 @@ class _AudioViewerPageState extends State<AudioViewerPage> {
                     height: 240,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isDark ? Colors.white05 : Colors.black05,
+                      color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                       border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 4),
                       boxShadow: [
                         BoxShadow(
@@ -260,7 +260,7 @@ class _AudioViewerPageState extends State<AudioViewerPage> {
                     DropdownButton<double>(
                       value: audioProv.playbackSpeed,
                       dropdownColor: isDark ? const Color(0xFF1E1E22) : Colors.white,
-                      style: TextStyle(fontFamily: 'Outfit', color: isDark ? Colors.white70 : Colors.black70),
+                      style: TextStyle(fontFamily: 'Outfit', color: isDark ? Colors.white70 : Colors.black.withOpacity(0.70)),
                       underline: const SizedBox.shrink(),
                       items: [0.5, 1.0, 1.25, 1.5, 2.0].map((s) {
                         return DropdownMenuItem(

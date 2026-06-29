@@ -265,7 +265,7 @@ class _CalculatorViewState extends State<CalculatorView> {
     final isDark = settings.isDarkMode;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    Color btnColor = isDark ? Colors.white05 : Colors.black05;
+    Color btnColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05);
     Color textColor = isDark ? Colors.white : Colors.black87;
 
     if (char == '=') {

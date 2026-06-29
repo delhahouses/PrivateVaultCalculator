@@ -49,7 +49,7 @@ class _SettingsViewState extends State<SettingsView> {
                       decoration: InputDecoration(
                         hintText: 'Current 4-digit PIN',
                         filled: true,
-                        fillColor: isDark ? Colors.white05 : Colors.black05,
+                        fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
@@ -62,7 +62,7 @@ class _SettingsViewState extends State<SettingsView> {
                       decoration: InputDecoration(
                         hintText: 'New 4-digit PIN',
                         filled: true,
-                        fillColor: isDark ? Colors.white05 : Colors.black05,
+                        fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
@@ -75,7 +75,7 @@ class _SettingsViewState extends State<SettingsView> {
                       decoration: InputDecoration(
                         hintText: 'Confirm New PIN',
                         filled: true,
-                        fillColor: isDark ? Colors.white05 : Colors.black05,
+                        fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
