@@ -29,15 +29,17 @@ if (flutterVersionName == null) {
 }
 
 android {
-    compileSdkVersion 34 // Mapped to Android SDK 34 for compilation compatibility
+    namespace "com.example.private_vault_calculator"
+    compileSdk flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
     sourceSets {
@@ -46,8 +48,8 @@ android {
 
     defaultConfig {
         applicationId "com.example.private_vault_calculator"
-        minSdkVersion 21
-        targetSdkVersion 34
+        minSdk flutter.minSdkVersion
+        targetSdk flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
@@ -79,5 +81,4 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
