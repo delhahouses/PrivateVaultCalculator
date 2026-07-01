@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
+import '../../core/permission_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -49,6 +50,8 @@ class _FolderViewState extends State<FolderView> {
 
   Future<void> _pickAndImportFile(VaultProvider vault, bool isPremium) async {
     _triggerHaptic();
+    final hasPermission = await VaultPermissionHelper.requestStoragePermission(context);
+    if (!hasPermission) return;
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -90,6 +93,8 @@ class _FolderViewState extends State<FolderView> {
 
   Future<void> _exportFile(VaultFile file, VaultProvider vault) async {
     _triggerHaptic();
+    final hasPermission = await VaultPermissionHelper.requestStoragePermission(context);
+    if (!hasPermission) return;
     try {
       final tempFile = await vault.getDecryptedFile(file);
       
@@ -137,6 +142,8 @@ class _FolderViewState extends State<FolderView> {
 
   Future<void> _exportSelected(VaultProvider vault) async {
     _triggerHaptic();
+    final hasPermission = await VaultPermissionHelper.requestStoragePermission(context);
+    if (!hasPermission) return;
     final count = _selectedFileIds.length;
     final ids = List<String>.from(_selectedFileIds);
 

@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
+import '../../core/permission_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/vault_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -85,6 +86,8 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
 
   Future<void> _importQuickFile(VaultProvider vault, bool isPremium) async {
     _triggerHaptic();
+    final hasPermission = await VaultPermissionHelper.requestStoragePermission(context);
+    if (!hasPermission) return;
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -132,17 +135,11 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
   Future<void> _captureFromCamera(VaultProvider vault, bool isPremium, {required bool recordVideo}) async {
     _triggerHaptic();
     
-    // Check permission
-    final permission = Permission.camera;
-    final status = await permission.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Camera permission is required to capture photos directly.')),
-        );
-      }
-      return;
-    }
+    final hasPermission = await VaultPermissionHelper.requestCameraPermission(
+      context,
+      needMicrophone: recordVideo,
+    );
+    if (!hasPermission) return;
 
     try {
       final picker = ImagePicker();
