@@ -5,6 +5,7 @@ import 'providers/auth_provider.dart';
 import 'providers/vault_provider.dart';
 import 'providers/calculator_provider.dart';
 import 'providers/audio_provider.dart';
+import 'providers/premium_provider.dart';
 import 'views/calculator_view.dart';
 import 'core/theme.dart';
 
@@ -20,6 +21,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => VaultProvider()),
         ChangeNotifierProvider(create: (_) => CalculatorProvider()),
         ChangeNotifierProvider(create: (_) => AudioProvider()),
+        ChangeNotifierProvider(create: (_) => PremiumProvider()),
       ],
       child: const MyApp(),
     ),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -12,10 +13,12 @@ class VaultProvider with ChangeNotifier {
   List<VaultFile> _files = [];
   bool _isLoading = false;
   String? _currentPin; // In-memory reference for file encryption/decryption
+  bool _isDecoy = false;
 
   List<VaultFolder> get folders => _folders;
   List<VaultFile> get files => _files;
   bool get isLoading => _isLoading;
+  bool get isDecoy => _isDecoy;
 
   VaultProvider() {
     _initVault();
@@ -26,17 +29,27 @@ class VaultProvider with ChangeNotifier {
     _currentPin = pin;
   }
 
+  /// Switches active database context to Decoy or Main vault.
+  Future<void> switchVaultContext({required bool decoy, required String pin}) async {
+    _currentPin = pin;
+    _isDecoy = decoy;
+    await _initVault();
+  }
+
   Future<void> _initVault() async {
     _isLoading = true;
     notifyListeners();
     try {
       final docDir = await getApplicationDocumentsDirectory();
-      final vaultDir = Directory(p.join(docDir.path, 'vault_files'));
+      final metaFileName = _isDecoy ? 'vault_metadata_decoy.json' : 'vault_metadata.json';
+      final filesDirName = _isDecoy ? 'vault_files_decoy' : 'vault_files';
+
+      final vaultDir = Directory(p.join(docDir.path, filesDirName));
       if (!await vaultDir.exists()) {
         await vaultDir.create(recursive: true);
       }
 
-      final metaFile = File(p.join(docDir.path, 'vault_metadata.json'));
+      final metaFile = File(p.join(docDir.path, metaFileName));
       if (await metaFile.exists()) {
         final content = await metaFile.readAsString();
         final Map<String, dynamic> data = json.decode(content);
@@ -58,7 +71,7 @@ class VaultProvider with ChangeNotifier {
         await _saveMetadata();
       }
     } catch (e) {
-      // Handle initialization error silently or log
+      // Handle initialization error
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -68,7 +81,8 @@ class VaultProvider with ChangeNotifier {
   Future<void> _saveMetadata() async {
     try {
       final docDir = await getApplicationDocumentsDirectory();
-      final metaFile = File(p.join(docDir.path, 'vault_metadata.json'));
+      final metaFileName = _isDecoy ? 'vault_metadata_decoy.json' : 'vault_metadata.json';
+      final metaFile = File(p.join(docDir.path, metaFileName));
       
       final Map<String, dynamic> data = {
         'folders': _folders.map((f) => f.toJson()).toList(),
@@ -81,8 +95,13 @@ class VaultProvider with ChangeNotifier {
     }
   }
 
-  /// Create a custom user folder.
-  Future<void> createFolder(String name) async {
+  /// Create a custom folder, enforcing premium limits (max 3 custom folders on free).
+  Future<bool> createFolder(String name, {required bool isPremium}) async {
+    if (!isPremium && _folders.length >= 8) {
+      // Allow up to 8 custom/default folders total for free, else lock
+      return false;
+    }
+    
     final folder = VaultFolder(
       id: const Uuid().v4(),
       name: name,
@@ -92,11 +111,11 @@ class VaultProvider with ChangeNotifier {
     _folders.add(folder);
     await _saveMetadata();
     notifyListeners();
+    return true;
   }
 
   /// Delete a folder and all files inside it.
   Future<void> deleteFolder(String folderId) async {
-    // Delete files in this folder first
     final filesInFolder = _files.where((f) => f.parentFolderId == folderId).toList();
     for (var file in filesInFolder) {
       await deleteFile(file.id);
@@ -106,29 +125,34 @@ class VaultProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Import a file into the vault, encrypt it, and store it.
-  Future<bool> importFile({
+  /// Import a file, enforcing premium limits (max 5 files on free).
+  /// Returns: 1 = Success, 0 = Generic Failure, -1 = Limit Exceeded
+  Future<int> importFile({
     required File sourceFile,
     required String parentFolderId,
+    required bool isPremium,
   }) async {
-    if (_currentPin == null) return false;
+    if (_currentPin == null) return 0;
+    if (!isPremium && _files.length >= 5) {
+      return -1; // Free tier limits reached
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
       final docDir = await getApplicationDocumentsDirectory();
       final fileId = const Uuid().v4();
-      final extension = p.extension(sourceFile.path);
+      final filesDirName = _isDecoy ? 'vault_files_decoy' : 'vault_files';
       
-      // Store encrypted files as .dat with random UUIDs to hide formats
       final encryptedFileName = '$fileId.dat';
-      final encryptedFilePath = p.join(docDir.path, 'vault_files', encryptedFileName);
+      final encryptedFilePath = p.join(docDir.path, filesDirName, encryptedFileName);
       final destinationFile = File(encryptedFilePath);
 
-      // Perform encryption
+      // Perform AES-256 encryption
       await VaultSecurity.encryptFile(sourceFile, destinationFile, _currentPin!);
 
-      // Gather Mimetype info
+      // Gather Mimetype & size info
       final filename = p.basename(sourceFile.path);
       final mimeType = _determineMimeType(filename);
       final size = await sourceFile.length();
@@ -145,9 +169,9 @@ class VaultProvider with ChangeNotifier {
 
       _files.add(vaultFile);
       await _saveMetadata();
-      return true;
+      return 1;
     } catch (e) {
-      return false;
+      return 0;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -155,7 +179,6 @@ class VaultProvider with ChangeNotifier {
   }
 
   /// Decrypts a vault file and saves it in the temporary cache directory.
-  /// Returns the path to the decrypted temporary file.
   Future<File> getDecryptedFile(VaultFile vaultFile) async {
     if (_currentPin == null) {
       throw Exception("PIN key not loaded in vault manager.");
@@ -172,7 +195,7 @@ class VaultProvider with ChangeNotifier {
     return tempFile;
   }
 
-  /// Delete a file from disk and database.
+  /// Delete a file from disk and database (Secure Delete).
   Future<void> deleteFile(String fileId) async {
     try {
       final index = _files.indexWhere((f) => f.id == fileId);
@@ -180,6 +203,10 @@ class VaultProvider with ChangeNotifier {
         final vaultFile = _files[index];
         final diskFile = File(vaultFile.encryptedPath);
         if (await diskFile.exists()) {
+          // Zero out bytes for secure deletion before deleting
+          final length = await diskFile.length();
+          final zeros = Uint8List(length);
+          await diskFile.writeAsBytes(zeros);
           await diskFile.delete();
         }
         _files.removeAt(index);
@@ -195,7 +222,6 @@ class VaultProvider with ChangeNotifier {
   Future<void> renameFile(String fileId, String newName) async {
     final idx = _files.indexWhere((f) => f.id == fileId);
     if (idx != -1) {
-      // Keep extension if user did not input it
       final ext = p.extension(_files[idx].originalName);
       final hasNewExt = p.extension(newName).isNotEmpty;
       _files[idx] = VaultFile(
@@ -239,6 +265,33 @@ class VaultProvider with ChangeNotifier {
       _files[idx].isFavorite = !_files[idx].isFavorite;
       await _saveMetadata();
       notifyListeners();
+    }
+  }
+
+  /// Wipes all main and decoy files/metadata instantly (Self Destruct).
+  Future<void> panicDestruct() async {
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+
+      // Wipe main vault
+      final mainMeta = File(p.join(docDir.path, 'vault_metadata.json'));
+      if (await mainMeta.exists()) await mainMeta.delete();
+      final mainFiles = Directory(p.join(docDir.path, 'vault_files'));
+      if (await mainFiles.exists()) await mainFiles.delete(recursive: true);
+
+      // Wipe decoy vault
+      final decoyMeta = File(p.join(docDir.path, 'vault_metadata_decoy.json'));
+      if (await decoyMeta.exists()) await decoyMeta.delete();
+      final decoyFiles = Directory(p.join(docDir.path, 'vault_files_decoy'));
+      if (await decoyFiles.exists()) await decoyFiles.delete(recursive: true);
+
+      _folders.clear();
+      _files.clear();
+      _isDecoy = false;
+      _currentPin = null;
+      notifyListeners();
+    } catch (e) {
+      // Silence errors during self-destruct
     }
   }
 

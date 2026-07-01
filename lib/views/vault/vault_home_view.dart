@@ -3,20 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 import '../../providers/auth_provider.dart';
 import '../../providers/vault_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/premium_provider.dart';
 import '../../models/vault_file.dart';
 import '../../core/theme.dart';
 import 'folder_view.dart';
 import 'settings_view.dart';
+import 'premium_upgrade_view.dart';
 import '../calculator_view.dart';
 import 'viewers/image_viewer.dart';
 import 'viewers/video_viewer.dart';
 import 'viewers/audio_viewer.dart';
 import 'viewers/pdf_viewer.dart';
-
 
 class VaultHomeView extends StatefulWidget {
   const VaultHomeView({super.key});
@@ -38,7 +41,6 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
     super.dispose();
   }
 
-  // Handle auto-lock on app lifecycle changes (e.g. backgrounded)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
@@ -54,9 +56,6 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
   void _checkLockState() {
     final authProv = Provider.of<AuthProvider>(context, listen: false);
     if (!authProv.isAuthenticated && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vault locked due to inactivity.')),
-      );
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const CalculatorView()),
         (route) => false,
@@ -76,7 +75,15 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
     HapticFeedback.lightImpact();
   }
 
-  Future<void> _importQuickFile(VaultProvider vault) async {
+  void _showUpgradeSheet() {
+    _triggerHaptic();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PremiumUpgradeView()),
+    );
+  }
+
+  Future<void> _importQuickFile(VaultProvider vault, bool isPremium) async {
     _triggerHaptic();
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -86,26 +93,94 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
 
       if (result != null && result.files.isNotEmpty) {
         int successCount = 0;
+        bool limitExceeded = false;
+
         for (var pickedFile in result.files) {
           if (pickedFile.path != null) {
             final file = File(pickedFile.path!);
             final category = _getFolderIdFromExtension(pickedFile.path!);
-            final success = await vault.importFile(
+            final status = await vault.importFile(
               sourceFile: file,
               parentFolderId: category,
+              isPremium: isPremium,
             );
-            if (success) successCount++;
+
+            if (status == 1) {
+              successCount++;
+            } else if (status == -1) {
+              limitExceeded = true;
+              break;
+            }
           }
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Successfully encrypted & imported $successCount files.')),
-          );
+          if (limitExceeded) {
+            _showUpgradeSheet();
+          } else if (successCount > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Successfully encrypted & imported $successCount files.')),
+            );
+          }
         }
       }
     } catch (e) {
       // Pick files error
+    }
+  }
+
+  Future<void> _captureFromCamera(VaultProvider vault, bool isPremium, {required bool recordVideo}) async {
+    _triggerHaptic();
+    
+    // Check permission
+    final permission = Permission.camera;
+    final status = await permission.request();
+    if (!status.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera permission is required to capture photos directly.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final picker = ImagePicker();
+      final XFile? file = recordVideo 
+          ? await picker.pickVideo(source: ImageSource.camera)
+          : await picker.pickImage(source: ImageSource.camera);
+
+      if (file != null) {
+        final sourceFile = File(file.path);
+        final categoryId = recordVideo ? 'videos' : 'photos';
+        
+        final result = await vault.importFile(
+          sourceFile: sourceFile,
+          parentFolderId: categoryId,
+          isPremium: isPremium,
+        );
+
+        // Delete temporary captured file immediately for absolute security
+        if (await sourceFile.exists()) {
+          await sourceFile.delete();
+        }
+
+        if (mounted) {
+          if (result == 1) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Captured media successfully encrypted and stored.')),
+            );
+          } else if (result == -1) {
+            _showUpgradeSheet();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error saving media to vault.')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      // Handle camera capture exception
     }
   }
 
@@ -126,7 +201,7 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
     return 'others';
   }
 
-  void _showAddFolderDialog(VaultProvider vault, bool isDark) {
+  void _showAddFolderDialog(VaultProvider vault, bool isPremium, bool isDark) {
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -149,10 +224,15 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
               child: const Text('Cancel', style: TextStyle(fontFamily: 'Outfit')),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (controller.text.isNotEmpty) {
-                  vault.createFolder(controller.text);
-                  Navigator.pop(context);
+                  final success = await vault.createFolder(controller.text, isPremium: isPremium);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    if (!success) {
+                      _showUpgradeSheet();
+                    }
+                  }
                 }
               },
               child: const Text('Create', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
@@ -163,10 +243,111 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
     );
   }
 
+  void _showAddOptionsSheet(VaultProvider vault, bool isPremium, bool isDark) {
+    _triggerHaptic();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E24) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Import or Capture',
+                style: TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildOptionItem(
+                    icon: Icons.camera_alt,
+                    label: 'Camera Photo',
+                    color: Colors.blueAccent,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _captureFromCamera(vault, isPremium, recordVideo: false);
+                    },
+                  ),
+                  _buildOptionItem(
+                    icon: Icons.videocam,
+                    label: 'Record Video',
+                    color: Colors.redAccent,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _captureFromCamera(vault, isPremium, recordVideo: true);
+                    },
+                  ),
+                  _buildOptionItem(
+                    icon: Icons.photo_library,
+                    label: 'Import Files',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _importQuickFile(vault, isPremium);
+                    },
+                  ),
+                  _buildOptionItem(
+                    icon: Icons.create_new_folder,
+                    label: 'New Folder',
+                    color: Colors.amber,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showAddFolderDialog(vault, isPremium, isDark);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(fontFamily: 'Outfit', fontSize: 11, fontWeight: FontWeight.bold),
+          )
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vaultProv = Provider.of<VaultProvider>(context);
     final settingsProv = Provider.of<SettingsProvider>(context);
+    final premiumProv = Provider.of<PremiumProvider>(context);
     final isDark = settingsProv.isDarkMode;
 
     return Listener(
@@ -174,13 +355,37 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
       onPointerMove: (_) => _userInteraction(),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'Secure Vault',
-            style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
+          title: Row(
+            children: [
+              const Text(
+                'Secure Vault',
+                style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
+              ),
+              if (vaultProv.isDecoy) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Decoy Mode',
+                    style: TextStyle(fontFamily: 'Outfit', fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                  ),
+                )
+              ]
+            ],
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
+            if (!premiumProv.isPremium)
+              TextButton.icon(
+                icon: const Icon(Icons.stars, color: Colors.amber, size: 18),
+                label: const Text('PRO', style: TextStyle(color: Colors.amber, fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+                onPressed: _showUpgradeSheet,
+              ),
             IconButton(
               icon: const Icon(Icons.settings),
               onPressed: () {
@@ -212,18 +417,19 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildStorageDashboard(vaultProv, isDark),
+                        // Dynamic storage and security dashboard
+                        _buildStorageDashboard(vaultProv, premiumProv, isDark),
                         const SizedBox(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text(
-                              'Categories',
+                              'Categories & Folders',
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Outfit'),
                             ),
                             IconButton(
                               icon: const Icon(Icons.create_new_folder_outlined),
-                              onPressed: () => _showAddFolderDialog(vaultProv, isDark),
+                              onPressed: () => _showAddFolderDialog(vaultProv, premiumProv.isPremium, isDark),
                             ),
                           ],
                         ),
@@ -242,19 +448,19 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _importQuickFile(vaultProv),
-          icon: const Icon(Icons.add_moderator),
-          label: const Text('Add File', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+          onPressed: () => _showAddOptionsSheet(vaultProv, premiumProv.isPremium, isDark),
+          icon: const Icon(Icons.add),
+          label: const Text('Add Content', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
         ),
       ),
     );
   }
 
-  Widget _buildStorageDashboard(VaultProvider vault, bool isDark) {
+  Widget _buildStorageDashboard(VaultProvider vault, PremiumProvider premium, bool isDark) {
     final summary = vault.getStorageSummary();
     double totalMB = summary.values.fold(0, (prev, val) => prev + val);
     
-    // Custom simulated limit (e.g. 512 MB for local user storage)
+    // Free tier has 5 files limit, PRO is unlimited.
     double maxLimit = 512.0; 
     double percentage = (totalMB / maxLimit).clamp(0.0, 1.0);
 
@@ -264,9 +470,30 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Encrypted Storage',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Outfit'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Security & Storage Dashboard',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Outfit'),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: premium.isPremium ? Colors.amber.withOpacity(0.15) : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  premium.isPremium ? 'PRO UNLOCKED' : 'FREE TIER (LIMITS ON)',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: premium.isPremium ? Colors.amber : Colors.grey,
+                  ),
+                ),
+              )
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -296,19 +523,37 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${totalMB.toStringAsFixed(1)} MB of ${maxLimit.toStringAsFixed(0)} MB used',
+                      '${totalMB.toStringAsFixed(1)} MB of ${maxLimit.toStringAsFixed(0)} MB',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, fontFamily: 'Outfit'),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Total files secured: ${vault.files.length}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Outfit'),
+                      'Secured Files: ${vault.files.length} ${!premium.isPremium ? "/ 5 max" : ""}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        color: !premium.isPremium && vault.files.length >= 5 ? Colors.redAccent : Colors.grey,
+                        fontFamily: 'Outfit',
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
+          const Divider(height: 24, color: Colors.white10),
+          Row(
+            children: [
+              const Icon(Icons.shield_outlined, color: Colors.green, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Screenshots: Blocked  |  Files: AES-256 Encrypted',
+                  style: TextStyle(fontFamily: 'Outfit', fontSize: 11, color: Colors.green.shade300),
+                ),
+              )
+            ],
+          )
         ],
       ),
     );
@@ -354,7 +599,6 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Icon(fIcon, color: Theme.of(context).colorScheme.primary, size: 28),
-                    // Allow deleting custom folders
                     if (!['photos', 'videos', 'audio', 'documents', 'others'].contains(folder.id))
                       GestureDetector(
                         onTap: () {
@@ -392,11 +636,11 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
     
     if (favorites.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 32),
+        padding: const EdgeInsets.symmetric(vertical: 24),
         alignment: Alignment.center,
         child: const Text(
           'No favorited items yet.',
-          style: TextStyle(color: Colors.grey, fontFamily: 'Outfit'),
+          style: TextStyle(color: Colors.grey, fontFamily: 'Outfit', fontSize: 13),
         ),
       );
     }
@@ -466,7 +710,6 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
         ),
       );
     } else {
-      // Fallback message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cannot preview file format of ${file.originalName}')),
       );

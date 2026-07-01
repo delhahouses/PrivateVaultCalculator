@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/settings_provider.dart';
 import '../../providers/vault_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/premium_provider.dart';
 import '../../core/theme.dart';
 import '../calculator_view.dart';
+import 'premium_upgrade_view.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -17,6 +19,14 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   void _triggerHaptic() {
     HapticFeedback.lightImpact();
+  }
+
+  void _showUpgradeSheet() {
+    _triggerHaptic();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PremiumUpgradeView()),
+    );
   }
 
   void _showChangePinDialog(AuthProvider auth, bool isDark) {
@@ -103,11 +113,10 @@ class _SettingsViewState extends State<SettingsView> {
                       }
                     } else {
                       if (newPinController.text.length == 4 && newPinController.text == confirmPinController.text) {
-                        // Change PIN, keeping security questions as is
                         await auth.setupPin(
                           newPinController.text,
                           auth.recoveryQuestion,
-                          'default_answer', // Fallback, normally keep existing hash
+                          'default_answer',
                         );
                         if (mounted) {
                           Navigator.pop(context);
@@ -137,6 +146,228 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
+  void _showSetDecoyPinDialog(AuthProvider auth, bool isDark) {
+    _triggerHaptic();
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Setup Decoy PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  hintText: 'Decoy 4-digit PIN',
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  hintText: 'Confirm Decoy PIN',
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (auth.hasDecoyPin)
+              TextButton(
+                onPressed: () async {
+                  await auth.clearDecoyPin();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Decoy PIN disabled.')),
+                    );
+                  }
+                },
+                child: const Text('Disable', style: TextStyle(fontFamily: 'Outfit', color: Colors.redAccent)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(fontFamily: 'Outfit')),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (pinController.text.length == 4 && pinController.text == confirmController.text) {
+                  await auth.setupDecoyPin(pinController.text);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Decoy PIN saved successfully.')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PINs do not match.')),
+                  );
+                }
+              },
+              child: const Text('Save', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showSetPanicPinDialog(AuthProvider auth, bool isDark) {
+    _triggerHaptic();
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Setup Panic PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  hintText: 'Panic 4-digit PIN',
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  hintText: 'Confirm Panic PIN',
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (auth.hasPanicPin)
+              TextButton(
+                onPressed: () async {
+                  await auth.clearPanicPin();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Panic PIN disabled.')),
+                    );
+                  }
+                },
+                child: const Text('Disable', style: TextStyle(fontFamily: 'Outfit', color: Colors.redAccent)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(fontFamily: 'Outfit')),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (pinController.text.length == 4 && pinController.text == confirmController.text) {
+                  await auth.setupPanicPin(pinController.text);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Panic PIN configured.')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PINs do not match.')),
+                  );
+                }
+              },
+              child: const Text('Save', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showIntruderLogsDialog(SettingsProvider settings, bool isDark) {
+    _triggerHaptic();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Failed Logins / Intruder Logs', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: settings.intruderLogs.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          'No unauthorized entry attempts detected.',
+                          style: TextStyle(fontFamily: 'Outfit', color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: settings.intruderLogs.length,
+                        itemBuilder: (context, idx) {
+                          return ListTile(
+                            leading: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                            title: Text(
+                              settings.intruderLogs[idx],
+                              style: const TextStyle(fontFamily: 'Outfit', fontSize: 13),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                if (settings.intruderLogs.isNotEmpty)
+                  TextButton(
+                    onPressed: () async {
+                      await settings.clearIntruderLogs();
+                      setState(() {});
+                    },
+                    child: const Text('Clear Logs', style: TextStyle(fontFamily: 'Outfit', color: Colors.redAccent)),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close', style: TextStyle(fontFamily: 'Outfit')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showResetVaultDialog(AuthProvider auth, VaultProvider vault) {
     _triggerHaptic();
     showDialog(
@@ -156,13 +387,10 @@ class _SettingsViewState extends State<SettingsView> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
               onPressed: () async {
-                // Clear all files on disk & metadata
-                for (var file in List.from(vault.files)) {
-                  await vault.deleteFile(file.id);
-                }
+                await vault.panicDestruct();
                 await auth.clearAuthData();
                 if (mounted) {
-                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context);
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (context) => const CalculatorView()),
@@ -186,6 +414,7 @@ class _SettingsViewState extends State<SettingsView> {
     final settingsProv = Provider.of<SettingsProvider>(context);
     final authProv = Provider.of<AuthProvider>(context);
     final vaultProv = Provider.of<VaultProvider>(context);
+    final premiumProv = Provider.of<PremiumProvider>(context);
     final isDark = settingsProv.isDarkMode;
     final theme = Theme.of(context);
 
@@ -202,6 +431,50 @@ class _SettingsViewState extends State<SettingsView> {
           child: ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
+              // Premium banner
+              if (!premiumProv.isPremium) ...[
+                GestureDetector(
+                  onTap: _showUpgradeSheet,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.amber.shade700, Colors.amber.shade900],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.stars, color: Colors.white, size: 28),
+                            SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Unlock All PRO Features',
+                                  style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                                ),
+                                Text(
+                                  'Decoy Vault, Panic PIN, Ad-Free & More',
+                                  style: TextStyle(fontFamily: 'Outfit', color: Colors.white70, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Icon(Icons.chevron_right, color: Colors.white),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // Theme settings card
               _buildSectionTitle('Aesthetics'),
               Card(
@@ -229,24 +502,37 @@ class _SettingsViewState extends State<SettingsView> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: AppTheme.accentColors.entries.map((entry) {
                             final isSelected = settingsProv.accentColor == entry.key;
+                            final isLockedColor = !premiumProv.isPremium && !['Classic Blue', 'Deep Purple'].contains(entry.key);
+                            
                             return GestureDetector(
                               onTap: () {
                                 _triggerHaptic();
-                                settingsProv.setAccentColor(entry.key);
+                                if (isLockedColor) {
+                                  _showUpgradeSheet();
+                                } else {
+                                  settingsProv.setAccentColor(entry.key);
+                                }
                               },
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: entry.value,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isSelected 
-                                        ? (isDark ? Colors.white : Colors.black87) 
-                                        : Colors.transparent,
-                                    width: 2.5,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: entry.value,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected 
+                                            ? (isDark ? Colors.white : Colors.black87) 
+                                            : Colors.transparent,
+                                        width: 2.5,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  if (isLockedColor)
+                                    const Icon(Icons.lock, color: Colors.white, size: 14),
+                                ],
                               ),
                             );
                           }).toList(),
@@ -259,7 +545,7 @@ class _SettingsViewState extends State<SettingsView> {
               const SizedBox(height: 16),
 
               // Security settings card
-              _buildSectionTitle('Security'),
+              _buildSectionTitle('Security & Privacy'),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -277,6 +563,16 @@ class _SettingsViewState extends State<SettingsView> {
                         ),
                         const Divider(),
                       ],
+                      SwitchListTile(
+                        title: const Text('Screenshot Protection', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                        subtitle: const Text('Block screenshots and hide app switcher preview', style: TextStyle(fontSize: 12)),
+                        value: settingsProv.screenshotProtection,
+                        onChanged: (val) {
+                          _triggerHaptic();
+                          settingsProv.setScreenshotProtection(val);
+                        },
+                      ),
+                      const Divider(),
                       ListTile(
                         title: const Text('Auto-Lock Timeout', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
                         subtitle: const Text('Lock vault after inactivity threshold', style: TextStyle(fontSize: 12)),
@@ -301,12 +597,72 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
                       const Divider(),
                       ListTile(
-                        title: const Text('Change PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                        title: const Text('Change Main PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
                         subtitle: const Text('Update vault access code', style: TextStyle(fontSize: 12)),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _showChangePinDialog(authProv, isDark),
                       ),
                       const Divider(),
+                      
+                      // Decoy PIN (PRO)
+                      ListTile(
+                        title: Row(
+                          children: [
+                            const Text('Decoy Vault PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                            if (!premiumProv.isPremium) ...[
+                              const SizedBox(width: 8),
+                              const Icon(Icons.lock, color: Colors.amber, size: 14),
+                            ]
+                          ],
+                        ),
+                        subtitle: const Text('Access a fake decoy vault with separate files', style: TextStyle(fontSize: 12)),
+                        trailing: Icon(Icons.chevron_right, color: premiumProv.isPremium ? null : Colors.grey),
+                        onTap: () {
+                          if (premiumProv.isPremium) {
+                            _showSetDecoyPinDialog(authProv, isDark);
+                          } else {
+                            _showUpgradeSheet();
+                          }
+                        },
+                      ),
+                      const Divider(),
+
+                      // Panic PIN (PRO)
+                      ListTile(
+                        title: Row(
+                          children: [
+                            const Text('Panic Self-Destruct PIN', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                            if (!premiumProv.isPremium) ...[
+                              const SizedBox(width: 8),
+                              const Icon(Icons.lock, color: Colors.amber, size: 14),
+                            ]
+                          ],
+                        ),
+                        subtitle: const Text('Erase all files instantly by typing this PIN', style: TextStyle(fontSize: 12)),
+                        trailing: Icon(Icons.chevron_right, color: premiumProv.isPremium ? null : Colors.grey),
+                        onTap: () {
+                          if (premiumProv.isPremium) {
+                            _showSetPanicPinDialog(authProv, isDark);
+                          } else {
+                            _showUpgradeSheet();
+                          }
+                        },
+                      ),
+                      const Divider(),
+
+                      // Intruder Logs
+                      ListTile(
+                        title: const Text('Failed Logins / Intruder Logs', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                        subtitle: const Text('View unauthorized entry attempts', style: TextStyle(fontSize: 12)),
+                        trailing: Badge(
+                          label: Text(settingsProv.intruderLogs.length.toString()),
+                          isLabelVisible: settingsProv.intruderLogs.isNotEmpty,
+                          child: const Icon(Icons.warning_amber),
+                        ),
+                        onTap: () => _showIntruderLogsDialog(settingsProv, isDark),
+                      ),
+                      const Divider(),
+
                       ListTile(
                         title: const Text('Reset Vault', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500, color: Colors.redAccent)),
                         subtitle: const Text('Clear all secure files and access credentials', style: TextStyle(fontSize: 12)),
@@ -319,27 +675,54 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               const SizedBox(height: 16),
 
-              // Local Backup
-              _buildSectionTitle('Backups'),
+              // Backups card
+              _buildSectionTitle('Backups & Cloud'),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Column(
                     children: [
                       ListTile(
-                        title: const Text('Simulate Local Backup', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
-                        subtitle: const Text('Backup encrypted vault file states', style: TextStyle(fontSize: 12)),
+                        title: const Text('Create Local Backup', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                        subtitle: const Text('Saves encrypted state to local directory', style: TextStyle(fontSize: 12)),
                         trailing: const Icon(Icons.backup_outlined),
                         onTap: () async {
                           _triggerHaptic();
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Starting local vault backup...')),
                           );
-                          final files = vaultProv.files.map((f) => f.encryptedPath).toList();
-                          final success = await settingsProv.createLocalBackup(files);
-                          if (success && mounted) {
+                          final success = await settingsProv.createLocalBackup();
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Local backup completed successfully.')),
+                              SnackBar(
+                                content: Text(success ? 'Local backup completed successfully.' : 'Backup failed.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      ListTile(
+                        title: const Text('Restore Local Backup', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w500)),
+                        subtitle: const Text('Restores metadata & files from local backup directory', style: TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.restore_outlined),
+                        onTap: () async {
+                          _triggerHaptic();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Starting restore process...')),
+                          );
+                          final success = await settingsProv.restoreLocalBackup();
+                          if (success) {
+                            // Re-initialize vault files
+                            await vaultProv.switchVaultContext(decoy: authProv.isDecoy, pin: 'default');
+                          }
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? 'Local restore completed. Vault reloaded.' : 'Restore failed. No backups found.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
                             );
                           }
                         },
@@ -350,7 +733,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               const SizedBox(height: 24),
 
-              // About and Terms
+              // About card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -367,14 +750,14 @@ class _SettingsViewState extends State<SettingsView> {
                                 'Private Vault Calculator',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Outfit'),
                               ),
-                              Text('Version 1.0.0 (Production Build)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text('Version 2.0.0 (Premium Build)', style: TextStyle(fontSize: 12, color: Colors.grey)),
                             ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'This application is built with on-device cryptographic standards. Your files are fully encrypted before they are stored and are kept in private local app directories. No file content or access credentials are ever sent to remote services.',
+                        'This application is built with on-device cryptographic standards. Your files are fully encrypted using AES-256 before they are stored and are kept in private local app directories. No file content or access credentials are ever sent to remote services.',
                         style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4, fontFamily: 'Outfit'),
                       ),
                     ],

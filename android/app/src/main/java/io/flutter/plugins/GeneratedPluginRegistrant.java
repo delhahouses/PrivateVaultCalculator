@@ -26,6 +26,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin file_picker, com.mr.flutter.plugin.filepicker.FilePickerPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new appmire.be.flutterjailbreakdetection.FlutterJailbreakDetectionPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_jailbreak_detection, appmire.be.flutterjailbreakdetection.FlutterJailbreakDetectionPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new io.endigo.plugins.pdfviewflutter.PDFViewFlutterPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_pdfview, io.endigo.plugins.pdfviewflutter.PDFViewFlutterPlugin", e);
@@ -41,6 +46,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin flutter_secure_storage, com.it_nomads.fluttersecurestorage.FlutterSecureStoragePlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new io.flutter.plugins.imagepicker.ImagePickerPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin image_picker_android, io.flutter.plugins.imagepicker.ImagePickerPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new com.github.dart_lang.jni.JniPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin jni, com.github.dart_lang.jni.JniPlugin", e);
@@ -54,6 +64,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new io.flutter.plugins.localauth.LocalAuthPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin local_auth_android, io.flutter.plugins.localauth.LocalAuthPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.baseflow.permissionhandler.PermissionHandlerPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin permission_handler_android, com.baseflow.permissionhandler.PermissionHandlerPlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new io.flutter.plugins.sharedpreferences.SharedPreferencesPlugin());

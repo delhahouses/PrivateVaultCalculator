@@ -1,3 +1,10 @@
+import org.gradle.api.artifacts.dsl.RepositoryHandler
+
+// Redirect all retired JCenter calls in plugins to mavenCentral
+RepositoryHandler.metaClass.jcenter = { ->
+    delegate.mavenCentral()
+}
+
 allprojects {
     repositories {
         google()
@@ -19,6 +26,51 @@ subprojects {
             p.android {
                 compileSdk 36
                 buildToolsVersion "36.0.0-rc5"
+                
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+                
+                try {
+                    // Extract package name from manifest to set namespace before it is stripped
+                    def manifestFile = p.file("src/main/AndroidManifest.xml")
+                    if (manifestFile.exists()) {
+                        def content = manifestFile.getText("UTF-8")
+                        def matcher = content =~ /\bpackage="([^"]*)"/
+                        if (matcher.find()) {
+                            namespace = matcher.group(1)
+                        }
+                    }
+                } catch (Exception e) {}
+                
+                try {
+                    if (namespace == null) {
+                        namespace = "com.dummy." + p.name.replaceAll("[^a-zA-Z0-9]", "")
+                    }
+                } catch (Exception e) {}
+            }
+            
+            // Dynamically strip package="xxx" attribute from manifest files before AGP processes them (exclude main app)
+            if (p.name != "app") {
+                p.tasks.matching { it.name.contains("Manifest") }.configureEach {
+                    doFirst {
+                        try {
+                            def manifestFile = p.file("src/main/AndroidManifest.xml")
+                            if (manifestFile.exists()) {
+                                def content = manifestFile.getText("UTF-8")
+                                def updatedContent = content.replaceAll(/\bpackage="[^"]*"/, "")
+                                manifestFile.write(updatedContent, "UTF-8")
+                            }
+                        } catch (Exception e) {}
+                    }
+                }
+            }
+            
+            p.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    jvmTarget = "17"
+                }
             }
         }
     }

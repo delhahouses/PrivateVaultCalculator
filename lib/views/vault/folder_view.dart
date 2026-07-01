@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/vault_file.dart';
 import '../../providers/vault_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/premium_provider.dart';
 import '../../core/theme.dart';
-import 'vault_home_view.dart'; // import media viewer redirects if needed, but we will import actual viewer pages
+import 'premium_upgrade_view.dart';
 import 'viewers/image_viewer.dart';
 import 'viewers/video_viewer.dart';
 import 'viewers/audio_viewer.dart';
@@ -37,7 +39,15 @@ class _FolderViewState extends State<FolderView> {
     HapticFeedback.lightImpact();
   }
 
-  Future<void> _pickAndImportFile(VaultProvider vault) async {
+  void _showUpgradeSheet() {
+    _triggerHaptic();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PremiumUpgradeView()),
+    );
+  }
+
+  Future<void> _pickAndImportFile(VaultProvider vault, bool isPremium) async {
     _triggerHaptic();
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -47,24 +57,94 @@ class _FolderViewState extends State<FolderView> {
 
       if (result != null && result.files.isNotEmpty) {
         int count = 0;
+        bool limitExceeded = false;
         for (var file in result.files) {
           if (file.path != null) {
-            final success = await vault.importFile(
+            final status = await vault.importFile(
               sourceFile: File(file.path!),
               parentFolderId: widget.folder.id,
+              isPremium: isPremium,
             );
-            if (success) count++;
+            if (status == 1) {
+              count++;
+            } else if (status == -1) {
+              limitExceeded = true;
+              break;
+            }
           }
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Imported $count files successfully.')),
-          );
+          if (limitExceeded) {
+            _showUpgradeSheet();
+          } else if (count > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Imported $count files successfully.')),
+            );
+          }
         }
       }
     } catch (e) {
       // Pick file error
     }
+  }
+
+  Future<void> _exportFile(VaultFile file, VaultProvider vault) async {
+    _triggerHaptic();
+    try {
+      final tempFile = await vault.getDecryptedFile(file);
+      
+      Directory? publicDir;
+      if (Platform.isAndroid) {
+        publicDir = Directory('/storage/emulated/0/Download');
+        if (!await publicDir.exists()) {
+          publicDir = await getExternalStorageDirectory();
+        }
+      } else {
+        publicDir = await getDownloadsDirectory();
+      }
+
+      if (publicDir == null) {
+        publicDir = await getTemporaryDirectory();
+      }
+
+      final exportPath = p.join(publicDir.path, file.originalName);
+      final exportedFile = File(exportPath);
+      
+      // Copy decrypted temp file to public directory
+      await tempFile.copy(exportPath);
+      
+      // Delete temporary file immediately
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File exported successfully to: ${p.basename(exportPath)}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to export file.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportSelected(VaultProvider vault) async {
+    _triggerHaptic();
+    final count = _selectedFileIds.length;
+    final ids = List<String>.from(_selectedFileIds);
+
+    for (var id in ids) {
+      final file = vault.files.firstWhere((f) => f.id == id);
+      await _exportFile(file, vault);
+    }
+    _clearSelection();
   }
 
   void _toggleSelection(String id) {
@@ -206,15 +286,12 @@ class _FolderViewState extends State<FolderView> {
   }
 
   List<VaultFile> _getProcessedFiles(List<VaultFile> allFiles) {
-    // Filter by folder
     List<VaultFile> folderFiles = allFiles.where((f) => f.parentFolderId == widget.folder.id).toList();
 
-    // Filter by search query
     if (_searchQuery.isNotEmpty) {
       folderFiles = folderFiles.where((f) => f.originalName.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
     }
 
-    // Sort files
     folderFiles.sort((a, b) {
       int comparison = 0;
       if (_sortBy == 'name') {
@@ -250,6 +327,7 @@ class _FolderViewState extends State<FolderView> {
   Widget build(BuildContext context) {
     final vaultProv = Provider.of<VaultProvider>(context);
     final settingsProv = Provider.of<SettingsProvider>(context);
+    final premiumProv = Provider.of<PremiumProvider>(context);
     final isDark = settingsProv.isDarkMode;
     final processedFiles = _getProcessedFiles(vaultProv.files);
 
@@ -259,6 +337,7 @@ class _FolderViewState extends State<FolderView> {
               leading: IconButton(icon: const Icon(Icons.close), onPressed: _clearSelection),
               title: Text('${_selectedFileIds.length} Selected', style: const TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
               actions: [
+                IconButton(icon: const Icon(Icons.download), onPressed: () => _exportSelected(vaultProv)),
                 IconButton(icon: const Icon(Icons.drive_file_move_outlined), onPressed: () => _moveSelected(vaultProv, isDark)),
                 IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteSelected(vaultProv)),
               ],
@@ -301,7 +380,6 @@ class _FolderViewState extends State<FolderView> {
         child: SafeArea(
           child: Column(
             children: [
-              // Search input
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: TextField(
@@ -339,7 +417,7 @@ class _FolderViewState extends State<FolderView> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _pickAndImportFile(vaultProv),
+        onPressed: () => _pickAndImportFile(vaultProv, premiumProv.isPremium),
         child: const Icon(Icons.add_photo_alternate),
       ),
     );
@@ -394,19 +472,28 @@ class _FolderViewState extends State<FolderView> {
               children: [
                 Align(
                   alignment: Alignment.topRight,
-                  child: GestureDetector(
-                    onTap: () {
-                      _triggerHaptic();
-                      vault.toggleFavorite(file.id);
-                    },
-                    child: Icon(
-                      file.isFavorite ? Icons.star : Icons.star_border,
-                      size: 18,
-                      color: file.isFavorite ? Colors.amber : Colors.grey,
-                    ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      GestureDetector(
+                        onTap: () => _exportFile(file, vault),
+                        child: const Icon(Icons.download, size: 16, color: Colors.grey),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          _triggerHaptic();
+                          vault.toggleFavorite(file.id);
+                        },
+                        child: Icon(
+                          file.isFavorite ? Icons.star : Icons.star_border,
+                          size: 18,
+                          color: file.isFavorite ? Colors.amber : Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Icon(fileIcon, size: 40, color: Theme.of(context).colorScheme.primary),
+                Icon(fileIcon, size: 36, color: Theme.of(context).colorScheme.primary),
                 Column(
                   children: [
                     Text(
@@ -480,6 +567,8 @@ class _FolderViewState extends State<FolderView> {
                   onSelected: (val) {
                     if (val == 'rename') {
                       _showRenameDialog(file, vault, isDark);
+                    } else if (val == 'export') {
+                      _exportFile(file, vault);
                     } else if (val == 'delete') {
                       _toggleSelection(file.id);
                       _deleteSelected(vault);
@@ -487,6 +576,7 @@ class _FolderViewState extends State<FolderView> {
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    const PopupMenuItem(value: 'export', child: Text('Export / Decrypt')),
                     const PopupMenuItem(value: 'delete', child: Text('Delete')),
                   ],
                 ),

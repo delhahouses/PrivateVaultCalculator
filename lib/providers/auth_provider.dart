@@ -12,14 +12,23 @@ class AuthProvider with ChangeNotifier {
   bool _isBiometricEnabled = false;
   bool _isBiometricsSupported = false;
   
-  String _recoveryQuestion = 'What was the name of your first pet?';
+  // Decoy & Panic State
+  bool _isDecoy = false;
+  bool _isPanicTriggered = false;
+  bool _hasDecoyPin = false;
+  bool _hasPanicPin = false;
   
+  String _recoveryQuestion = 'What was the name of your first pet?';
   DateTime _lastInteractionTime = DateTime.now();
 
   bool get isPinSet => _isPinSet;
   bool get isAuthenticated => _isAuthenticated;
   bool get isBiometricEnabled => _isBiometricEnabled;
   bool get isBiometricsSupported => _isBiometricsSupported;
+  bool get isDecoy => _isDecoy;
+  bool get isPanicTriggered => _isPanicTriggered;
+  bool get hasDecoyPin => _hasDecoyPin;
+  bool get hasPanicPin => _hasPanicPin;
   String get recoveryQuestion => _recoveryQuestion;
 
   AuthProvider() {
@@ -33,10 +42,17 @@ class AuthProvider with ChangeNotifier {
       // Setup default PIN "4000" for first-time users
       pinHash = VaultSecurity.hashPin("4000");
       await _secureStorage.write(key: 'vault_pin_hash', value: pinHash);
+      await _secureStorage.write(key: 'vault_pin_plain', value: '4000');
       await _secureStorage.write(key: 'recovery_question', value: 'What is the default recovery PIN?');
       await _secureStorage.write(key: 'recovery_answer_hash', value: VaultSecurity.hashPin('4000'));
     }
     _isPinSet = true;
+
+    final decoyHash = await _secureStorage.read(key: 'vault_decoy_pin_hash');
+    _hasDecoyPin = decoyHash != null;
+
+    final panicHash = await _secureStorage.read(key: 'vault_panic_pin_hash');
+    _hasPanicPin = panicHash != null;
 
     final bioEnabled = await _secureStorage.read(key: 'biometric_enabled');
     _isBiometricEnabled = bioEnabled == 'true';
@@ -58,10 +74,11 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets up a new PIN and security question answers.
+  /// Sets up a new main PIN and security question answers.
   Future<void> setupPin(String pin, String question, String answer) async {
     final pinHash = VaultSecurity.hashPin(pin);
     await _secureStorage.write(key: 'vault_pin_hash', value: pinHash);
+    await _secureStorage.write(key: 'vault_pin_plain', value: pin);
     
     await _secureStorage.write(key: 'recovery_question', value: question);
     _recoveryQuestion = question;
@@ -72,23 +89,79 @@ class AuthProvider with ChangeNotifier {
     
     _isPinSet = true;
     _isAuthenticated = true;
+    _isDecoy = false;
     updateInteractionTime();
     notifyListeners();
   }
 
-  /// Verify entered PIN.
-  Future<bool> verifyPin(String pin) async {
-    final pinHash = await _secureStorage.read(key: 'vault_pin_hash');
-    if (pinHash == null) return false;
+  /// Sets up the Decoy Vault PIN.
+  Future<void> setupDecoyPin(String pin) async {
+    final pinHash = VaultSecurity.hashPin(pin);
+    await _secureStorage.write(key: 'vault_decoy_pin_hash', value: pinHash);
+    _hasDecoyPin = true;
+    notifyListeners();
+  }
 
+  /// Sets up the Panic PIN.
+  Future<void> setupPanicPin(String pin) async {
+    final pinHash = VaultSecurity.hashPin(pin);
+    await _secureStorage.write(key: 'vault_panic_pin_hash', value: pinHash);
+    _hasPanicPin = true;
+    notifyListeners();
+  }
+
+  /// Clears Decoy PIN.
+  Future<void> clearDecoyPin() async {
+    await _secureStorage.delete(key: 'vault_decoy_pin_hash');
+    _hasDecoyPin = false;
+    notifyListeners();
+  }
+
+  /// Clears Panic PIN.
+  Future<void> clearPanicPin() async {
+    await _secureStorage.delete(key: 'vault_panic_pin_hash');
+    _hasPanicPin = false;
+    notifyListeners();
+  }
+
+  /// Verify entered PIN. Handles main PIN, Decoy PIN, and Panic PIN.
+  Future<bool> verifyPin(String pin) async {
     final enteredHash = VaultSecurity.hashPin(pin);
-    if (pinHash == enteredHash) {
+
+    // 1. Check Panic PIN
+    final panicHash = await _secureStorage.read(key: 'vault_panic_pin_hash');
+    if (panicHash != null && panicHash == enteredHash) {
+      _isPanicTriggered = true;
+      notifyListeners();
+      return true;
+    }
+
+    // 2. Check Decoy PIN
+    final decoyHash = await _secureStorage.read(key: 'vault_decoy_pin_hash');
+    if (decoyHash != null && decoyHash == enteredHash) {
+      _isDecoy = true;
       _isAuthenticated = true;
       updateInteractionTime();
       notifyListeners();
       return true;
     }
+
+    // 3. Check Main PIN
+    final pinHash = await _secureStorage.read(key: 'vault_pin_hash');
+    if (pinHash != null && pinHash == enteredHash) {
+      _isDecoy = false;
+      _isAuthenticated = true;
+      updateInteractionTime();
+      notifyListeners();
+      return true;
+    }
+
     return false;
+  }
+
+  /// Retrieves the plain text main PIN for file decryption when biometrics is used.
+  Future<String?> getPlainPin() async {
+    return await _secureStorage.read(key: 'vault_pin_plain');
   }
 
   /// Recover PIN using security question.
@@ -99,6 +172,7 @@ class AuthProvider with ChangeNotifier {
     final enteredHash = VaultSecurity.hashPin(answer.toLowerCase().trim());
     if (savedHash == enteredHash) {
       _isAuthenticated = true;
+      _isDecoy = false;
       updateInteractionTime();
       notifyListeners();
       return true;
@@ -121,6 +195,7 @@ class AuthProvider with ChangeNotifier {
 
       if (authenticated) {
         _isAuthenticated = true;
+        _isDecoy = false; // Biometrics always unlocks main vault
         updateInteractionTime();
         notifyListeners();
         return true;
@@ -144,6 +219,8 @@ class AuthProvider with ChangeNotifier {
   /// Lock session
   void lock() {
     _isAuthenticated = false;
+    _isDecoy = false;
+    _isPanicTriggered = false;
     notifyListeners();
   }
 
@@ -159,12 +236,19 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> clearAuthData() async {
     await _secureStorage.delete(key: 'vault_pin_hash');
+    await _secureStorage.delete(key: 'vault_pin_plain');
+    await _secureStorage.delete(key: 'vault_decoy_pin_hash');
+    await _secureStorage.delete(key: 'vault_panic_pin_hash');
     await _secureStorage.delete(key: 'recovery_question');
     await _secureStorage.delete(key: 'recovery_answer_hash');
     await _secureStorage.delete(key: 'biometric_enabled');
     _isPinSet = false;
     _isAuthenticated = false;
     _isBiometricEnabled = false;
+    _isDecoy = false;
+    _isPanicTriggered = false;
+    _hasDecoyPin = false;
+    _hasPanicPin = false;
     notifyListeners();
   }
 }

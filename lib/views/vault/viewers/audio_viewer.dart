@@ -58,7 +58,6 @@ class _AudioViewerPageState extends State<AudioViewerPage> {
   @override
   Widget build(BuildContext context) {
     final audioProv = Provider.of<AudioProvider>(context);
-    final vaultProv = Provider.of<VaultProvider>(context);
     final settingsProv = Provider.of<SettingsProvider>(context);
     final isDark = settingsProv.isDarkMode;
     final theme = Theme.of(context);
