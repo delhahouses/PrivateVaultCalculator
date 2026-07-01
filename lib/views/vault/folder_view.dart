@@ -12,6 +12,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/premium_provider.dart';
 import '../../core/theme.dart';
 import 'premium_upgrade_view.dart';
+import 'vault_drawer.dart';
 import 'viewers/image_viewer.dart';
 import 'viewers/video_viewer.dart';
 import 'viewers/audio_viewer.dart';
@@ -339,6 +340,7 @@ class _FolderViewState extends State<FolderView> {
     final processedFiles = _getProcessedFiles(vaultProv.files);
 
     return Scaffold(
+      drawer: const VaultDrawer(),
       appBar: _isSelectionMode
           ? AppBar(
               leading: IconButton(icon: const Icon(Icons.close), onPressed: _clearSelection),

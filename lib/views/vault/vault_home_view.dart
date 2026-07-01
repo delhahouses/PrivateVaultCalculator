@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 import '../../core/permission_helper.dart';
 import '../../providers/auth_provider.dart';
@@ -16,6 +15,7 @@ import '../../core/theme.dart';
 import 'folder_view.dart';
 import 'settings_view.dart';
 import 'premium_upgrade_view.dart';
+import 'vault_drawer.dart';
 import '../calculator_view.dart';
 import 'viewers/image_viewer.dart';
 import 'viewers/video_viewer.dart';
@@ -351,6 +351,7 @@ class _VaultHomeViewState extends State<VaultHomeView> with WidgetsBindingObserv
       onPointerDown: (_) => _userInteraction(),
       onPointerMove: (_) => _userInteraction(),
       child: Scaffold(
+        drawer: const VaultDrawer(),
         appBar: AppBar(
           title: Row(
             children: [

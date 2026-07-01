@@ -8,6 +8,7 @@ import '../../providers/premium_provider.dart';
 import '../../core/theme.dart';
 import '../calculator_view.dart';
 import 'premium_upgrade_view.dart';
+import 'vault_drawer.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -419,6 +420,7 @@ class _SettingsViewState extends State<SettingsView> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      drawer: const VaultDrawer(),
       appBar: AppBar(
         title: const Text('Settings', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
