@@ -28,8 +28,15 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> _initAuth() async {
     // Check if secure keys exist
-    final pinHash = await _secureStorage.read(key: 'vault_pin_hash');
-    _isPinSet = pinHash != null;
+    var pinHash = await _secureStorage.read(key: 'vault_pin_hash');
+    if (pinHash == null) {
+      // Setup default PIN "4000" for first-time users
+      pinHash = VaultSecurity.hashPin("4000");
+      await _secureStorage.write(key: 'vault_pin_hash', value: pinHash);
+      await _secureStorage.write(key: 'recovery_question', value: 'What is the default recovery PIN?');
+      await _secureStorage.write(key: 'recovery_answer_hash', value: VaultSecurity.hashPin('4000'));
+    }
+    _isPinSet = true;
 
     final bioEnabled = await _secureStorage.read(key: 'biometric_enabled');
     _isBiometricEnabled = bioEnabled == 'true';
